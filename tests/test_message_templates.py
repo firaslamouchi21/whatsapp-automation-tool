@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from src.message_templates import MessageTemplateManager, TemplateError
@@ -63,3 +61,25 @@ class TestMessageTemplateManager:
 
         with pytest.raises(TemplateError):
             self.manager.load_templates_from_file(invalid_file)
+
+    def test_non_mapping_file_rejected(self, tmp_path):
+        bad = tmp_path / "list.yaml"
+        bad.write_text("- one\n- two\n")
+        with pytest.raises(TemplateError):
+            self.manager.load_templates_from_file(bad)
+
+    def test_malformed_entries_are_skipped(self, tmp_path):
+        f = tmp_path / "mixed.yaml"
+        f.write_text(
+            "good:\n  name: Good\n  template: 'Hi {business_name}'\n"
+            "  variables: [business_name]\n  language: en\n"
+            "junk: not-a-dict\n"
+        )
+        self.manager.load_templates_from_file(f)
+        assert "good" in self.manager.templates
+        assert "junk" not in self.manager.templates
+
+    def test_empty_file_is_noop(self, tmp_path):
+        f = tmp_path / "empty.yaml"
+        f.write_text("")
+        self.manager.load_templates_from_file(f)  # must not raise

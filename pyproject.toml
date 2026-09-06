@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "whatsapp-automation-tool"
-dynamic = ["version"]
-description = "Professional WhatsApp automation tool for business outreach - Docker only"
+version = "3.0.0"
+description = "Send personalized WhatsApp messages to business leads from a Docker web dashboard"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -29,7 +29,6 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.0.0",
-    "pywhatkit>=5.4",
     "phonenumbers>=8.13.0",
     "pyyaml>=6.0",
     "tqdm>=4.65.0",
@@ -39,6 +38,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+send = ["pywhatkit>=5.4"]
+web = ["Flask>=3.0,<4"]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
@@ -54,9 +55,6 @@ dev = [
 Homepage = "https://github.com/firaslamouchi21/whatsapp-automation-tool"
 Repository = "https://github.com/firaslamouchi21/whatsapp-automation-tool"
 "Bug Tracker" = "https://github.com/firaslamouchi21/whatsapp-automation-tool/issues"
-
-[tool.setuptools.dynamic]
-version = {attr = "src.__init__.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["."]

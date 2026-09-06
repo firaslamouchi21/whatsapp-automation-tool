@@ -160,6 +160,3 @@ temp/
 data/*.csv
 !data/sample_*.csv
 !data/one_lead.csv
-
-# Docker
-.dockerignore

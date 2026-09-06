@@ -45,13 +45,19 @@ class MessageTemplateManager:
                     templates = yaml.safe_load(f)
                 else:
                     templates = json.load(f)
-
-            self.templates.update(templates)
-
         except (json.JSONDecodeError, yaml.YAMLError) as e:
             raise TemplateError(f"Error parsing template file: {e}")
         except Exception as e:
             raise TemplateError(f"Error loading template file: {e}")
+
+        if templates is None:
+            return
+        if not isinstance(templates, dict):
+            raise TemplateError(f"Template file must contain a mapping: {file_path}")
+
+        for name, data in templates.items():
+            if isinstance(data, dict) and "template" in data:
+                self.templates[str(name)] = data
 
     def get_template(self, template_name: str) -> Optional[Dict[str, Any]]:
         return self.templates.get(template_name)

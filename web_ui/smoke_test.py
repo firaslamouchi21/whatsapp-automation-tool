@@ -5,6 +5,7 @@ Boots the Flask app with its test client and drives the campaign flow far enough
 to prove the wiring works: templates load, leads validate, a message renders.
 Exits non-zero on any failure so CI fails loudly.
 """
+
 import sys
 from pathlib import Path
 

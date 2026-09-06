@@ -1,5 +1,6 @@
-Flask==2.3.3
-Werkzeug==2.3.7
-pandas==2.0.3
-pyyaml==6.0.1
-openpyxl==3.1.2
+# Web UI dependencies — layered on top of the core runtime requirements.
+# pandas / pyyaml / openpyxl / requests all come from ../requirements.txt so they
+# are not re-pinned here (re-pinning caused resolver conflicts in CI/Docker).
+-r ../requirements.txt
+
+Flask>=3.0,<4
