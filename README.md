@@ -9,7 +9,7 @@
 
 Bonne journée! ness lkol, This is a simple tool to send automated WhatsApp messages to your leads. It runs entirely in Docker (no installation needed!) and gives you a visual browser interface so you can see what's happening originaly built for myself because I was tired of doing it all of the leads messaging manually.
 
-////Note important dont exceed 100 messages per day otherwise your whatsapp account will be banned mine got banned after 40 messages sent in one day ////.
+.
 
 > ⚠️ **Read this first.** Note important dont exceed 100 messages per day otherwise your whatsapp account will be banned mine got banned after 40 messages sent in one day. This tool adds delays between messages, but you are responsible for how you use it. For your own outreach to people who expect to hear from you; not for spam.
 
