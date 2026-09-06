@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from app import app  # noqa: E402
 
+app.testing = True
+
 
 def main() -> int:
     client = app.test_client()
