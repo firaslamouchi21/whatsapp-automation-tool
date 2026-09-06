@@ -74,7 +74,9 @@ profile = "black"
 line_length = 100
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12 so mypy can parse modern third-party stubs (e.g. numpy's `type` aliases).
+# Runtime still supports 3.11+ (enforced by the test matrix).
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
