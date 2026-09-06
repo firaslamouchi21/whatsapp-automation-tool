@@ -1,0 +1,7 @@
+# Extra deps needed only to actually send WhatsApp messages (drives WhatsApp Web
+# through a real browser via pywhatkit). Pulls pyautogui/Pillow/etc. Installed in
+# the Docker image; not required for dry-run, validation, the CLI, the web UI
+# browsing flow, or the test suite (which mocks pywhatkit).
+-r requirements.txt
+
+pywhatkit>=5.4

@@ -1,6 +1,7 @@
-
+# Core runtime: lead processing, validation, templating, CLI.
+# Actually sending messages needs the WhatsApp Web automation stack in
+# requirements-send.txt (installed in the Docker image, not needed for CI/tests).
 pandas>=2.0.0
-pywhatkit>=5.4
 phonenumbers>=8.13.0
 pyyaml>=6.0
 tqdm>=4.65.0

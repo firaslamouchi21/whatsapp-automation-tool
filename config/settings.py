@@ -11,6 +11,7 @@ class WhatsAppConfig:
     tab_close: bool = True
     close_time: int = 3
     max_retries: int = 3
+    retry_delay: int = 5
 
 
 @dataclass
@@ -44,11 +45,36 @@ class ConfigManager:
     def __init__(self, config_file: Optional[Path] = None):
         self.config_file = config_file or Path("config/config.yaml")
         self.config = self._load_config()
+        self._apply_env_overrides()
 
     def _load_config(self) -> AppConfig:
         if self.config_file.exists():
             return self._load_from_file()
         return self._get_default_config()
+
+    def _apply_env_overrides(self) -> None:
+        """Merge WHATSAPP_* / LOG_* / BATCH_SIZE env vars onto the loaded config."""
+        sections: Dict[str, Any] = {
+            "whatsapp": self.config.whatsapp,
+            "logging": self.config.logging,
+            "processing": self.config.processing,
+        }
+        env_mappings = {
+            "WHATSAPP_RATE_LIMIT": ("whatsapp", "rate_limit_delay", int),
+            "WHATSAPP_WAIT_TIME": ("whatsapp", "wait_time", int),
+            "WHATSAPP_MAX_RETRIES": ("whatsapp", "max_retries", int),
+            "LOG_LEVEL": ("logging", "level", str),
+            "LOG_FILE": ("logging", "log_file", Path),
+            "BATCH_SIZE": ("processing", "batch_size", int),
+        }
+        for env_var, (section, key, type_func) in env_mappings.items():
+            value = os.getenv(env_var)
+            if value:
+                setattr(sections[section], key, type_func(value))
+
+    def whatsapp_settings(self) -> Dict[str, Any]:
+        """Flat dict of the WhatsApp settings, ready for ``WhatsAppAutomation``."""
+        return asdict(self.config.whatsapp)
 
     def _load_from_file(self) -> AppConfig:
         import yaml
@@ -89,23 +115,3 @@ class ConfigManager:
         for key, value in updates.items():
             if hasattr(self.config, key):
                 setattr(self.config, key, value)
-
-    def get_env_overrides(self) -> Dict[str, Any]:
-        overrides = {}
-
-        env_mappings = {
-            "WHATSAPP_RATE_LIMIT": ("whatsapp", "rate_limit_delay", int),
-            "WHATSAPP_WAIT_TIME": ("whatsapp", "wait_time", int),
-            "LOG_LEVEL": ("logging", "level", str),
-            "LOG_FILE": ("logging", "log_file", Path),
-            "BATCH_SIZE": ("processing", "batch_size", int),
-        }
-
-        for env_var, (section, key, type_func) in env_mappings.items():
-            value = os.getenv(env_var)
-            if value:
-                if section not in overrides:
-                    overrides[section] = {}
-                overrides[section][key] = type_func(value)
-
-        return overrides

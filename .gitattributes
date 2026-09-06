@@ -1,0 +1,8 @@
+# Keep shell scripts and Dockerfiles LF even on Windows checkouts - CRLF breaks
+# them inside the Linux container.
+*.sh text eol=lf
+Dockerfile text eol=lf
+entrypoint.sh text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

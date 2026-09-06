@@ -1,46 +1,19 @@
-version: '3.8'
-
 services:
   whatsapp-automation:
     build: .
+    image: ghcr.io/firaslamouchi21/whatsapp-automation-tool:latest
     container_name: whatsapp-automation-tool
+    ports:
+      - "5000:5000"   # dashboard
+      - "6080:6080"   # in-container browser (noVNC)
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./output:/app/output
-      - ./config:/app/config
       - ./templates:/app/templates
-      - ./config/config.yaml:/app/config/config.yaml:ro
+      - ./config:/app/config
     environment:
-      - PYTHONUNBUFFERED=1
-      - DISPLAY=:99
-      - BROWSER=chromium-wrapper
       - WHATSAPP_RATE_LIMIT=20
       - LOG_LEVEL=INFO
       - SECRET_KEY=change-me-in-production
-    ports:
-      - "5000:5000"
-      - "6080:6080"
-      - "5900:5900"
-    command: ["sleep", "infinity"]
     restart: unless-stopped
-    networks:
-      - whatsapp-network
-
-  redis:
-    image: redis:7-alpine
-    container_name: whatsapp-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    networks:
-      - whatsapp-network
-
-volumes:
-  redis_data:
-
-networks:
-  whatsapp-network:
-    driver: bridge

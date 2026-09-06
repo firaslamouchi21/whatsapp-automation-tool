@@ -1,6 +1,4 @@
-import pytest
-
-from src.phone_validator import PhoneValidationError, PhoneValidator
+from src.phone_validator import PhoneValidator
 
 
 class TestPhoneValidator:

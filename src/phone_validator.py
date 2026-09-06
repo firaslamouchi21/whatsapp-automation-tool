@@ -30,7 +30,7 @@ class PhoneValidator:
             parsed_number = phonenumbers.parse(cleaned, region)
             if not phonenumbers.is_valid_number(parsed_number):
                 return None
-            return phonenumbers.format_number(parsed_number, PhoneNumberFormat.E164)
+            return str(phonenumbers.format_number(parsed_number, PhoneNumberFormat.E164))
         except (NumberParseException, ValueError):
             return None
 

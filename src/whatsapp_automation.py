@@ -1,7 +1,8 @@
+import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 from tqdm import tqdm
@@ -18,23 +19,43 @@ class CampaignResult:
     failed_sends: int
     invalid_numbers: int
     duration_seconds: float
+    records: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class WhatsAppAutomation:
     def __init__(
-        self, config: Optional[Dict[str, Any]] = None, progress_callback: Optional[Callable] = None
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable] = None,
+        verbose: bool = False,
     ):
-        self.config = config or {}
+        self.config = self._flatten_config(config or {})
         self.phone_validator = PhoneValidator()
         self.template_manager = MessageTemplateManager()
         self.logger = LoggerConfig.setup_logger(
-            "whatsapp_automation", Path("logs/whatsapp_automation.log")
+            "whatsapp_automation",
+            Path("logs/whatsapp_automation.log"),
+            level=logging.DEBUG if verbose else logging.INFO,
         )
+        self.logger.setLevel(logging.DEBUG if verbose else logging.INFO)
         self.progress_callback = progress_callback
-        self.rate_limit_delay = self.config.get("rate_limit_delay", 20)
-        self.wait_time = self.config.get("wait_time", 10)
-        self.tab_close = self.config.get("tab_close", True)
-        self.close_time = self.config.get("close_time", 3)
+        self.rate_limit_delay = int(self.config.get("rate_limit_delay", 20))
+        self.wait_time = int(self.config.get("wait_time", 10))
+        self.tab_close = bool(self.config.get("tab_close", True))
+        self.close_time = int(self.config.get("close_time", 3))
+        self.max_retries = max(1, int(self.config.get("max_retries", 3)))
+        self.retry_delay = int(self.config.get("retry_delay", 5))
+
+    @staticmethod
+    def _flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
+        """Accept either a flat settings dict or a nested one with a ``whatsapp`` key
+        (as produced by ``AppConfig.__dict__``), returning the flat form."""
+        whatsapp = config.get("whatsapp")
+        if whatsapp is None:
+            return dict(config)
+        if hasattr(whatsapp, "__dict__") and not isinstance(whatsapp, dict):
+            return dict(vars(whatsapp))
+        return dict(whatsapp)
 
     def load_leads(self, file_path: Path) -> pd.DataFrame:
         if not file_path.exists():
@@ -68,24 +89,33 @@ class WhatsAppAutomation:
         }
 
     def send_message(self, phone_number: str, message: str, business_name: str) -> bool:
-        try:
-            import time
+        import pywhatkit
 
-            import pywhatkit
-
-            time.sleep(3)
-            pywhatkit.sendwhatmsg_instantly(
-                phone_no=phone_number,
-                message=message,
-                wait_time=self.wait_time,
-                tab_close=self.tab_close,
-                close_time=self.close_time,
-            )
-            self.logger.info(f"SUCCESS: Message sent to {business_name} at {phone_number}")
-            return True
-        except Exception as e:
-            self.logger.error(f"ERROR: Failed to send to {business_name}: {e}")
-            return False
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                time.sleep(3)
+                pywhatkit.sendwhatmsg_instantly(
+                    phone_no=phone_number,
+                    message=message,
+                    wait_time=self.wait_time,
+                    tab_close=self.tab_close,
+                    close_time=self.close_time,
+                )
+                self.logger.info(f"SUCCESS: Message sent to {business_name} at {phone_number}")
+                return True
+            except Exception as e:
+                if attempt < self.max_retries:
+                    self.logger.warning(
+                        f"RETRY {attempt}/{self.max_retries - 1}: send to {business_name} "
+                        f"failed ({e}); retrying in {self.retry_delay}s"
+                    )
+                    time.sleep(self.retry_delay)
+                else:
+                    self.logger.error(
+                        f"ERROR: Failed to send to {business_name} after "
+                        f"{self.max_retries} attempts: {e}"
+                    )
+        return False
 
     def process_campaign(
         self,
@@ -97,17 +127,27 @@ class WhatsAppAutomation:
     ) -> CampaignResult:
         end_index = end_index or len(leads_df)
         leads_to_process = leads_df.iloc[start_index:end_index]
+        last_position = len(leads_to_process) - 1
         successful_sends = 0
         failed_sends = 0
         invalid_numbers = 0
+        records: List[Dict[str, Any]] = []
         start_time = time.time()
         with tqdm(total=len(leads_to_process), desc="Processing leads", unit="leads") as pbar:
-            for index, row in leads_to_process.iterrows():
+            for position, (_, row) in enumerate(leads_to_process.iterrows()):
                 lead = self.validate_lead(row)
                 if not lead:
                     invalid_numbers += 1
+                    records.append(
+                        {
+                            "business_name": str(row.get("Business Name", "")),
+                            "phone_number": str(row.get("Phone Number", "")),
+                            "status": "invalid_number",
+                        }
+                    )
                     pbar.update(1)
                     continue
+                status = "unknown"
                 try:
                     message = self.template_manager.render_template(template_name, lead)
                     if dry_run:
@@ -116,18 +156,28 @@ class WhatsAppAutomation:
                             f"at {lead['phone_number']}"
                         )
                         successful_sends += 1
+                        status = "dry_run"
+                    elif self.send_message(lead["phone_number"], message, lead["business_name"]):
+                        successful_sends += 1
+                        status = "sent"
                     else:
-                        if self.send_message(lead["phone_number"], message, lead["business_name"]):
-                            successful_sends += 1
-                        else:
-                            failed_sends += 1
+                        failed_sends += 1
+                        status = "send_failed"
                     if self.progress_callback:
                         self.progress_callback(lead, successful_sends, failed_sends)
                 except (TemplateError, PhoneValidationError) as e:
                     self.logger.error(f"Validation error: {e}")
                     failed_sends += 1
+                    status = "render_failed"
+                records.append(
+                    {
+                        "business_name": lead["business_name"],
+                        "phone_number": lead["phone_number"],
+                        "status": status,
+                    }
+                )
                 pbar.update(1)
-                if not dry_run and index < end_index - 1:
+                if not dry_run and position < last_position:
                     time.sleep(self.rate_limit_delay)
         duration = time.time() - start_time
         result = CampaignResult(
@@ -136,6 +186,7 @@ class WhatsAppAutomation:
             failed_sends=failed_sends,
             invalid_numbers=invalid_numbers,
             duration_seconds=duration,
+            records=records,
         )
         self.logger.info(
             f"Campaign completed: {result.successful_sends} successful, "

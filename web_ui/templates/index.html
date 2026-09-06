@@ -73,8 +73,18 @@
                     <label class="small text-muted">Preview</label>
                     <div class="p-2 bg-light border-start border-success" id="msgPreview" style="white-space:pre-wrap;font-size:0.85rem"></div>
                 </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="dryRun" checked>
+                    <label class="form-check-label small" for="dryRun">Dry run (don't actually send)</label>
+                </div>
+                <div id="progressBox" class="mb-2" style="display:none">
+                    <div class="progress" style="height:20px">
+                        <div id="progressBar" class="progress-bar bg-success" style="width:0%">0%</div>
+                    </div>
+                    <div id="progressText" class="small text-muted mt-1"></div>
+                </div>
                 <div class="d-grid gap-2">
-                    <button class="btn btn-success" id="btnConfirm" onclick="confirmCampaign()" disabled>Confirm</button>
+                    <button class="btn btn-success" id="btnConfirm" onclick="confirmCampaign()" disabled>Confirm &amp; Start</button>
                     <a href="/vnc" class="btn btn-whatsapp" id="btnVNC" style="display:none" target="_blank">
                         <i class="bi bi-display me-2"></i>Open WhatsApp Web
                     </a>
@@ -266,6 +276,7 @@ function updateStatus() {
 
 async function confirmCampaign() {
     if (!selectedTmpl || leadCount === 0) return;
+    const dryRun = document.getElementById('dryRun').checked;
 
     try {
         const summary = await apiCall('/api/campaign/confirm', {method: 'POST'});
@@ -273,13 +284,45 @@ async function confirmCampaign() {
             document.getElementById('previewBox').style.display = 'block';
             document.getElementById('msgPreview').textContent = summary.summary.preview_message;
         }
-        await apiCall('/api/campaign/start', {method: 'POST'});
+        await apiCall('/api/campaign/start', {
+            method: 'POST', body: JSON.stringify({dry_run: dryRun})
+        });
         document.getElementById('step-3').classList.add('completed');
-        document.getElementById('step-4').classList.add('completed');
         document.getElementById('btnConfirm').style.display = 'none';
         document.getElementById('btnVNC').style.display = 'block';
-        showToast('Campaign ready! Open WhatsApp Web to continue.');
+        document.getElementById('progressBox').style.display = 'block';
+        showToast(dryRun ? 'Dry run started.' : 'Campaign started - open WhatsApp Web.');
+        pollProgress();
     } catch(e) { /* toast shown by apiCall */ }
+}
+
+async function pollProgress() {
+    const bar = document.getElementById('progressBar');
+    const text = document.getElementById('progressText');
+    try {
+        const s = await apiCall('/api/campaign/progress');
+        const p = s.progress;
+        if (p && p.total) {
+            const pct = Math.round(100 * (p.processed || 0) / p.total);
+            bar.style.width = pct + '%';
+            bar.textContent = pct + '%';
+            text.textContent = `${p.processed || 0}/${p.total} processed` +
+                (p.successful != null ? ` - ${p.successful} ok, ${p.failed} failed` : '');
+        }
+        if (s.status === 'completed') {
+            const r = s.result || {};
+            document.getElementById('step-4').classList.add('completed');
+            text.textContent = `Done: ${r.successful_sends} sent, ${r.failed_sends} failed, ` +
+                `${r.invalid_numbers} invalid` + (r.dry_run ? ' (dry run)' : '');
+            return;
+        }
+        if (s.status === 'failed') {
+            bar.classList.replace('bg-success', 'bg-danger');
+            text.textContent = 'Failed: ' + (s.error || 'unknown error');
+            return;
+        }
+        setTimeout(pollProgress, 1500);
+    } catch(e) { setTimeout(pollProgress, 3000); }
 }
 
 async function resetCampaign() {

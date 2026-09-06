@@ -1,247 +1,188 @@
 # WhatsApp Automation Tool
 
-<div align="center">
+[![CI](https://github.com/firaslamouchi21/-WhatsApp-Automation-Tool/actions/workflows/ci.yml/badge.svg)](https://github.com/firaslamouchi21/-WhatsApp-Automation-Tool/actions/workflows/ci.yml)
+[![Docker image](https://img.shields.io/badge/ghcr.io-whatsapp--automation--tool-2496ED?logo=docker&logoColor=white)](https://github.com/firaslamouchi21/-WhatsApp-Automation-Tool/pkgs/container/whatsapp-automation-tool)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
-![Docker](https://img.shields.io/badge/Docker-Only-blue)
-![GHCR](https://img.shields.io/badge/GHCR-Available-blue)
+**Send personalized WhatsApp messages to a list of business leads — from a point‑and‑click web dashboard, running entirely in Docker.**
 
-Automated WhatsApp messaging with a browser GUI - runs in Docker on Linux VM
+Bonne journée! ness lkol, This is a simple tool to send automated WhatsApp messages to your leads. It runs entirely in Docker (no installation needed!) and gives you a visual browser interface so you can see what's happening originaly built for myself because I was tired of doing it all of the leads messaging manually.
 
-</div>
+.
 
-Bonne journée! ness lkol, This is a simple tool to send automated WhatsApp messages to your leads. It runs entirely in Docker (no installation needed!) and gives you a visual browser interface so you can see what's happening originaly built for myself because I was tired of doing it all of the leads messaging manually.now that i found a job i can focus on improving this tool.for community use. ill be able to release full version in few months.if you wanna help me you can mail me at firaslamou@gmail.com et merci!
+> ⚠️ **Read this first.** Note important dont exceed 100 messages per day otherwise your whatsapp account will be banned mine got banned after 40 messages sent in one day. This tool adds delays between messages, but you are responsible for how you use it. For your own outreach to people who expect to hear from you; not for spam.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Campaign dashboard" width="820">
+</p>
 
+---
 
-////Note important dont exceed 100 messages per day otherwise your  whatsapp account will be banned mine got banned after 40 messages sent in one day ////
-
-## Getting Started
-
-This tool runs in a Docker container on a Linux virtual machine. That means you don't need to install anything on your computer - just Docker kahaw!
-
-### Step 1: Pull the image
+## Quick start
 
 ```bash
-docker pull ghcr.io/firaslamouchi21/whatsapp-automation-tool:latest
+# 1. Run it (Web UI on :5000, in-container browser on :6080)
+docker run -d --name wa \
+  -p 5000:5000 -p 6080:6080 \
+  -v "$PWD/data:/app/data" \
+  ghcr.io/firaslamouchi21/whatsapp-automation-tool:latest
+
+# 2. Open the dashboard
+open http://localhost:5000
 ```
 
-### Step 2: Run it with Docker Compose
+Then in the dashboard:
+
+1. **Pick a template** (or create your own).
+2. **Add leads** — upload a CSV or type them in.
+3. **Confirm** to see a rendered preview.
+4. **Open WhatsApp Web** (`http://localhost:6080/vnc.html`), scan the QR code with your phone.
+5. Watch the messages send.
+
+Your leads CSV needs at least these columns:
+
+```csv
+Business Name,Phone Number,Category
+Acme Restaurant,+974 3169 1362,Food
+Blue Cafe,+974 5088 5757,Food
+```
+
+---
+
+## Features
+
+- 🖥️ **Web dashboard** — manage templates, leads and campaigns without touching a terminal
+- 🌍 **Multi‑language templates** — English, French, Arabic, Tunisian; 8 categories each
+- ☎️ **Phone validation** — every number checked and normalised to E.164 via `phonenumbers`
+- 👀 **Visible browser** — WhatsApp Web runs in the container, streamed to your browser over noVNC
+- 🧪 **Dry‑run mode** — see exactly what would be sent, send nothing
+- 🐢 **Rate limiting** — configurable delay between messages
+- 🐳 **Docker‑only** — one image, runs the same everywhere
+- 🖱️ **CLI too** — script it if you prefer
+
+---
+
+## Command line
+
+Everything the dashboard does is also available on the CLI:
 
 ```bash
-# Save this as docker-compose.yml
-version: '3.8'
+# list available templates
+docker exec wa python main.py --list-templates
+
+# check a CSV without sending anything
+docker exec wa python main.py --validate-leads data/leads.csv
+
+# preview a campaign (renders every message, sends nothing)
+docker exec wa python main.py --leads data/leads.csv --template meeting_request --dry-run
+
+# send for real
+docker exec wa python main.py --leads data/leads.csv --template meeting_request
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--leads PATH` | CSV of leads (`Business Name`, `Phone Number`, optional `Category`) |
+| `--template NAME` | template id (see `--list-templates`) |
+| `--dry-run` | render + log, don't send |
+| `--start N` / `--end N` | process a slice of the CSV |
+| `--validate-leads PATH` | just validate phone numbers and exit |
+| `--list-templates` | print all template ids |
+
+---
+
+## Configuration
+
+Set via environment variables (in `docker run -e ...` or a compose file):
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `WHATSAPP_RATE_LIMIT` | `20` | seconds between messages |
+| `WHATSAPP_WAIT_TIME` | `10` | seconds to wait for WhatsApp Web to load a chat |
+| `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `SECRET_KEY` | dev key | Flask session key — **set this** if you expose the dashboard |
+| `WA_DEBUG` | off | set to `1` to enable the Flask debugger (local only) |
+
+Or mount a `config/config.yaml` — see [`config/config.yaml`](config/config.yaml) for the full shape.
+
+---
+
+## Message templates
+
+Templates live in [`templates/<lang>/<category>/messages.yaml`](templates/) and use `{business_name}` / `{category}` placeholders:
+
+```yaml
+meeting_request:
+  name: "Meeting Request"
+  template: |
+    Hi {business_name},
+
+    I'd like to schedule a short call to discuss how we can work together.
+    Are you free for 15 minutes this week?
+  variables: ["business_name"]
+  language: en
+```
+
+| Language | Code | Categories |
+|----------|------|------------|
+| English | `en` | IT · accounting · work · life (8 templates) |
+| French | `fr` | same |
+| Arabic | `ar` | same |
+| Tunisian | `tn` | same |
+
+Add your own from the dashboard (**+ Add** on the Templates card) or by dropping a YAML file in the right folder.
+
+---
+
+## Run with Docker Compose
+
+```yaml
 services:
   whatsapp-automation:
     image: ghcr.io/firaslamouchi21/whatsapp-automation-tool:latest
     container_name: whatsapp-automation-tool
-    environment:
-      - PYTHONUNBUFFERED=1
-      - DISPLAY=:99
-      - BROWSER=chromium-wrapper
-      - WHATSAPP_RATE_LIMIT=20
-      - LOG_LEVEL=INFO
     ports:
-      - "5000:5000"   # Web UI (new!)
-      - "6080:6080"   # noVNC web interface
-      - "5900:5900"   # VNC (optional)
+      - "5000:5000"   # dashboard
+      - "6080:6080"   # in-container browser (noVNC)
     volumes:
       - ./data:/app/data
-      - ./logs:/app/logs
-      - ./output:/app/output
-      - ./templates:/app/templates  # For custom templates
-    command: ["sleep", "infinity"]
+      - ./templates:/app/templates
+    environment:
+      - WHATSAPP_RATE_LIMIT=20
+      - SECRET_KEY=change-me
     restart: unless-stopped
 ```
 
-Then start it up:
-
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
-
-### Step 3: Open the browser GUI
-
-Now open your browser and go to:
-
-```text
-http://localhost:6080/vnc.html
-```
-
-You'll see a Chromium browser window inside the container. It should automatically open WhatsApp Web. Just scan the QR code with your phone and you're ready to go!
-
-### Step 4: Use the Web UI (New!)
-
-We've built a beautiful web interface to manage your campaigns:
-
-#### Port 5000 - Campaign Manager UI
-
-`http://localhost:5000`
-
-The web interface lets you:
-
-- **Choose Templates**: Select from pre-made templates in English, French, Arabic, or Tunisian
-- **Add Templates**: Create custom templates directly in the UI
-- **Manage Leads**: Upload CSV files or type leads manually
-- **Preview Messages**: See exactly what your message will look like
-- **Launch Campaign**: Click to open WhatsApp Web and start messaging
-
-### Workflow
-
-1. Open `http://localhost:5000`
-
-2. Select a template from the grid
-
-3. Add leads (upload CSV or type them in)
-
-4. Click "Confirm" to see a preview
-
-5. Click "Open WhatsApp Web" to launch the browser
-
-6. Scan the QR code and watch your messages go out!
-
-### Step 5: Send your first message
-
-Create a simple CSV file at `data/one_lead.csv`:
-
-```csv
-Category,Business Name,Phone Number
-Test,Test Recipient,+97431013551
-```
-
-Then run the campaign:
-
-```bash
-docker exec -it whatsapp-automation-tool python main.py --leads data/one_lead.csv --template business_proposal
-```
-
-## What it can do
-
-- 🎨 **Web Dashboard** - Point-and-click interface to manage everything
-- 📱 Send real WhatsApp messages through WhatsApp Web
-- 🖥️ Visual browser inside Docker so you can see what's happening
-- 🌍 Templates in 4 languages: English, French, Arabic, and Tunisian
-- � Upload CSVs or type leads directly in the browser
-- 📝 Create custom templates right from the UI
-- 🧪 Preview messages before sending
-- 🐳 Everything runs in Docker - no installation hassle
-
-## How to use it
-
-### Test without sending (dry run)
-
-Want to see what would happen without actually sending anything?
-
-```bash
-docker exec -it whatsapp-automation-tool python main.py --leads data/leads.csv --template business_proposal --dry-run
-```
-
-### See available templates
-
-```bash
-docker exec -it whatsapp-automation-tool python main.py --list-templates
-```
-
-### Check if phone numbers are valid
-
-```bash
-docker exec -it whatsapp-automation-tool python main.py --validate-leads data/leads.csv
-```
-
-### Change the delay between messages
-
-By default it waits 20 seconds between messages. You can change that:
-
-```bash
-docker exec -it whatsapp-automation-tool python main.py --leads data/leads.csv --template business_proposal --rate-limit 30
-```
-
-## Configuration
-
-You can tweak these settings in your docker-compose.yml:
-
-```bash
-WHATSAPP_RATE_LIMIT=20   # Delay between messages in seconds
-LOG_LEVEL=INFO           # DEBUG, INFO, WARNING, or ERROR
-SECRET_KEY=change-me     # Flask session key
-```
-
-## Message Templates
-
-We've got templates ready to go in 4 languages, organized by category 'hata twensa hsebtlekom 7sebkom':
-
-| Language | Code | Categories                          |
-|----------|------|-------------------------------------|
-| English  | `en` | IT, Accounting, Work, Life          |
-| French   | `fr` | IT, Accounting, Work, Life          |
-| Arabic   | `ar` | IT, Accounting, Work, Life          |
-| Tunisian | `tn` | IT, Accounting, Work, Life          |
-
-A typical template looks like:
-
-```text
-Hello {business_name},
-
-We offer professional services tailored to your needs.
-
-Would you be interested in discussing how we can help grow your business?
-
-Best regards
-Your Team
-```
-
-Placeholders you can use:
-- `{business_name}` - pulled from your CSV or lead form
-
-- `{category}` - pulled from your CSV or lead form
-
-## Building it yourself
-
-If you want to build the Docker image locally instead of pulling from GHCR:
-
-```bash
-git clone https://github.com/firaslamouchi21/whatsapp-automation-tool.git
-cd whatsapp-automation-tool
-docker build -t whatsapp-automation-tool .
-```
-
-## Running tests
-
-```bash
-docker run --rm whatsapp-automation-tool pytest tests/
-```
-
-## Publishing to GHCR
-
-When you're ready to share your changes:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-GitHub Actions will automatically build and publish the image to:
-
-```text
-ghcr.io/firaslamouchi21/whatsapp-automation-tool:latest
-ghcr.io/firaslamouchi21/whatsapp-automation-tool:v1.0.0
-```
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file.
-
-## Contributing
-
-Want to help make this better? Check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## Changelog
-
-See what's changed in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-**⭐ Star this repo if it helped you!**
+## Development
 
-Made with ❤️
+The whole toolchain runs in CI (`lint` → `test` on 3.11/3.12 → live‑server `smoke` → `docker` container healthcheck). To run it locally:
+
+```bash
+git clone https://github.com/firaslamouchi21/-WhatsApp-Automation-Tool.git
+cd -WhatsApp-Automation-Tool
+python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -r web_ui/requirements.txt -r requirements-dev.txt
+
+pytest                       # unit tests
+python web_ui/smoke_test.py  # web UI wiring
+python web_ui/app.py         # dashboard on http://localhost:5000
+```
+
+`black`, `isort`, `flake8` and `mypy` config is in [`pyproject.toml`](pyproject.toml); `pre-commit install` wires them as hooks. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## Why this exists
+
+Built by [@firaslamouchi21](https://github.com/firaslamouchi21) after one too many evenings pasting the same message into WhatsApp Web by hand for a list of leads. If it saves you that time too, a ⭐ is appreciated — and issues / PRs are welcome.
+
+## License
+
+[MIT](LICENSE).

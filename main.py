@@ -101,15 +101,26 @@ def progress_callback(lead, successful, failed):
     )
 
 
+def _write_results(result: CampaignResult, output_dir: Path) -> Path:
+    import csv
+    from datetime import datetime
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / f"campaign_results_{datetime.now():%Y%m%d_%H%M%S}.csv"
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["business_name", "phone_number", "status"])
+        writer.writeheader()
+        writer.writerows(result.records)
+    return path
+
+
 def run_campaign(args) -> Optional[CampaignResult]:
     config_manager = ConfigManager(args.config)
-    config = config_manager.get_config()
-
-    if args.verbose:
-        config.logging.level = "DEBUG"
 
     automation = WhatsAppAutomation(
-        config=config.__dict__, progress_callback=progress_callback if not args.verbose else None
+        config=config_manager.whatsapp_settings(),
+        progress_callback=progress_callback if not args.verbose else None,
+        verbose=args.verbose,
     )
 
     try:
@@ -121,15 +132,16 @@ def run_campaign(args) -> Optional[CampaignResult]:
             end_index=args.end,
         )
 
-        print(f"\n\nCampaign Results:")
+        print("\n\nCampaign Results:")
         print(f"  Total leads: {result.total_leads}")
         print(f"  Successful: {result.successful_sends}")
         print(f"  Failed: {result.failed_sends}")
         print(f"  Invalid numbers: {result.invalid_numbers}")
         print(f"  Duration: {result.duration_seconds:.2f} seconds")
 
-        if args.dry_run:
-            print("\n")
+        if args.output and result.records:
+            out = _write_results(result, args.output)
+            print(f"  Results written to: {out}")
 
         return result
 
