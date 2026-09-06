@@ -11,7 +11,7 @@ class LoggerConfig:
         name: str,
         log_file: Optional[Path] = None,
         level: int = logging.INFO,
-        format_string: Optional[str] = None
+        format_string: Optional[str] = None,
     ) -> logging.Logger:
         logger = logging.getLogger(name)
         logger.setLevel(level)
@@ -27,7 +27,7 @@ class LoggerConfig:
         logger.addHandler(console_handler)
         if log_file:
             log_file.parent.mkdir(parents=True, exist_ok=True)
-            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
             file_handler.setLevel(level)
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
