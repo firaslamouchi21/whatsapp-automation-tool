@@ -1,13 +1,14 @@
 import time
-import pandas as pd
-from pathlib import Path
-from typing import Dict, Optional, Any, Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
+
+import pandas as pd
 from tqdm import tqdm
 
-from .phone_validator import PhoneValidator, PhoneValidationError
-from .message_templates import MessageTemplateManager, TemplateError
 from .logger_config import LoggerConfig
+from .message_templates import MessageTemplateManager, TemplateError
+from .phone_validator import PhoneValidationError, PhoneValidator
 
 
 @dataclass
@@ -21,16 +22,13 @@ class CampaignResult:
 
 class WhatsAppAutomation:
     def __init__(
-        self,
-        config: Optional[Dict[str, Any]] = None,
-        progress_callback: Optional[Callable] = None
+        self, config: Optional[Dict[str, Any]] = None, progress_callback: Optional[Callable] = None
     ):
         self.config = config or {}
         self.phone_validator = PhoneValidator()
         self.template_manager = MessageTemplateManager()
         self.logger = LoggerConfig.setup_logger(
-            "whatsapp_automation",
-            Path("logs/whatsapp_automation.log")
+            "whatsapp_automation", Path("logs/whatsapp_automation.log")
         )
         self.progress_callback = progress_callback
         self.rate_limit_delay = self.config.get("rate_limit_delay", 20)
@@ -66,18 +64,14 @@ class WhatsAppAutomation:
             "business_name": str(business_name).strip(),
             "phone_number": formatted_phone,
             "category": str(category).strip(),
-            "original_data": row.to_dict()
+            "original_data": row.to_dict(),
         }
 
-    def send_message(
-        self,
-        phone_number: str,
-        message: str,
-        business_name: str
-    ) -> bool:
+    def send_message(self, phone_number: str, message: str, business_name: str) -> bool:
         try:
-            import pywhatkit
             import time
+
+            import pywhatkit
 
             time.sleep(3)
             pywhatkit.sendwhatmsg_instantly(
@@ -85,11 +79,9 @@ class WhatsAppAutomation:
                 message=message,
                 wait_time=self.wait_time,
                 tab_close=self.tab_close,
-                close_time=self.close_time
+                close_time=self.close_time,
             )
-            self.logger.info(
-                f"SUCCESS: Message sent to {business_name} at {phone_number}"
-            )
+            self.logger.info(f"SUCCESS: Message sent to {business_name} at {phone_number}")
             return True
         except Exception as e:
             self.logger.error(f"ERROR: Failed to send to {business_name}: {e}")
@@ -101,7 +93,7 @@ class WhatsAppAutomation:
         template_name: str,
         dry_run: bool = False,
         start_index: int = 0,
-        end_index: Optional[int] = None
+        end_index: Optional[int] = None,
     ) -> CampaignResult:
         end_index = end_index or len(leads_df)
         leads_to_process = leads_df.iloc[start_index:end_index]
@@ -109,11 +101,7 @@ class WhatsAppAutomation:
         failed_sends = 0
         invalid_numbers = 0
         start_time = time.time()
-        with tqdm(
-            total=len(leads_to_process),
-            desc="Processing leads",
-            unit="leads"
-        ) as pbar:
+        with tqdm(total=len(leads_to_process), desc="Processing leads", unit="leads") as pbar:
             for index, row in leads_to_process.iterrows():
                 lead = self.validate_lead(row)
                 if not lead:
@@ -121,10 +109,7 @@ class WhatsAppAutomation:
                     pbar.update(1)
                     continue
                 try:
-                    message = self.template_manager.render_template(
-                        template_name,
-                        lead
-                    )
+                    message = self.template_manager.render_template(template_name, lead)
                     if dry_run:
                         self.logger.info(
                             f"DRY RUN: Would send to {lead['business_name']} "
@@ -132,11 +117,7 @@ class WhatsAppAutomation:
                         )
                         successful_sends += 1
                     else:
-                        if self.send_message(
-                            lead["phone_number"],
-                            message,
-                            lead["business_name"]
-                        ):
+                        if self.send_message(lead["phone_number"], message, lead["business_name"]):
                             successful_sends += 1
                         else:
                             failed_sends += 1
@@ -154,7 +135,7 @@ class WhatsAppAutomation:
             successful_sends=successful_sends,
             failed_sends=failed_sends,
             invalid_numbers=invalid_numbers,
-            duration_seconds=duration
+            duration_seconds=duration,
         )
         self.logger.info(
             f"Campaign completed: {result.successful_sends} successful, "
@@ -168,20 +149,14 @@ class WhatsAppAutomation:
         template_name: str,
         dry_run: bool = False,
         start_index: int = 0,
-        end_index: Optional[int] = None
+        end_index: Optional[int] = None,
     ) -> CampaignResult:
         try:
             leads_df = self.load_leads(leads_file)
             if not self.template_manager.validate_template(template_name):
                 raise TemplateError(f"Invalid template: {template_name}")
             self.logger.info(f"Starting campaign with template: {template_name}")
-            return self.process_campaign(
-                leads_df,
-                template_name,
-                dry_run,
-                start_index,
-                end_index
-            )
+            return self.process_campaign(leads_df, template_name, dry_run, start_index, end_index)
         except Exception as e:
             self.logger.error(f"Campaign failed: {e}")
             raise

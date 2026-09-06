@@ -37,6 +37,7 @@
                         <i class="bi bi-upload"></i>CSV
                     </button>
                     <input type="file" id="csvFile" style="display:none" accept=".csv" onchange="uploadCSV(event)">
+                    <button class="btn btn-sm btn-outline-danger" onclick="clearLeads()"><i class="bi bi-trash"></i>Clear</button>
                 </div>
             </div>
             <div class="card-body">
@@ -113,6 +114,7 @@
 {% block extra_js %}
 <script>
 let templates = {}, leads = [], selectedTmpl = null;
+let leadCount = 0;
 let currentLang = 'all';
 
 document.addEventListener('DOMContentLoaded', loadData);
@@ -154,7 +156,14 @@ async function selectTmpl(id) {
     document.getElementById('selTmpl').innerHTML = `<strong>${templates[id].name}</strong>`;
     document.getElementById('step-1').classList.add('completed');
     updateStatus();
-    
+
+    try {
+        await apiCall('/api/campaign/select-template', {
+            method: 'POST',
+            body: JSON.stringify({template_name: id})
+        });
+    } catch(e) { console.error(e); }
+
     if (leads.length > 0) {
         const preview = await apiCall('/api/campaign/preview', {
             method: 'POST',
@@ -175,12 +184,19 @@ async function addLead() {
     const phone = document.getElementById('lPhone').value;
     if (!name || !phone) return showToast('Name and phone required', 'danger');
     
-    const lead = {business_name: name, phone_number: phone, category: ''};
-    leads.push(lead);
-    renderLeads();
-    document.getElementById('lName').value = '';
-    document.getElementById('lPhone').value = '';
-    updateStatus();
+    try {
+        const resp = await apiCall('/api/leads/add', {
+            method: 'POST',
+            body: JSON.stringify({business_name: name, phone_number: phone, category: ''})
+        });
+        leads.push(resp.lead);
+        leadCount = resp.total_leads;
+        renderLeads();
+        document.getElementById('lName').value = '';
+        document.getElementById('lPhone').value = '';
+        document.getElementById('step-2').classList.add('completed');
+        updateStatus();
+    } catch(e) { /* apiCall already shows a toast */ }
 }
 
 function renderLeads() {
@@ -188,28 +204,36 @@ function renderLeads() {
     const empty = document.getElementById('noLeads');
     tbody.innerHTML = '';
     
-    if (leads.length === 0) {
+    if (leads.length === 0 && leadCount === 0) {
         empty.style.display = 'block';
+        document.getElementById('leadCount').textContent = 0;
         return;
     }
     empty.style.display = 'none';
-    
+
     leads.forEach((l, i) => {
         tbody.innerHTML += `
             <tr>
                 <td>${i+1}</td>
                 <td>${l.business_name}</td>
                 <td>${l.phone_number}</td>
-                <td><button class="btn btn-sm btn-danger" onclick="removeLead(${i})"><i class="bi bi-trash"></i></button></td>
+                <td></td>
             </tr>`;
     });
-    document.getElementById('leadCount').textContent = leads.length;
+    if (leadCount > leads.length) {
+        tbody.innerHTML += `<tr><td colspan="4" class="text-muted small">
+            + ${leadCount - leads.length} more (showing first ${leads.length})</td></tr>`;
+    }
+    document.getElementById('leadCount').textContent = leadCount;
 }
 
-function removeLead(idx) {
-    leads.splice(idx, 1);
-    renderLeads();
-    updateStatus();
+async function clearLeads() {
+    try {
+        await apiCall('/api/leads/clear', {method: 'POST'});
+        leads = []; leadCount = 0;
+        renderLeads();
+        updateStatus();
+    } catch(e) { /* toast shown by apiCall */ }
 }
 
 async function uploadCSV(e) {
@@ -223,11 +247,12 @@ async function uploadCSV(e) {
         const resp = await fetch('/api/leads/upload', {method: 'POST', body: formData});
         const data = await resp.json();
         if (data.success) {
-            leads = data.leads || [];
+            leads = data.preview || [];
+            leadCount = data.leads_count;
             renderLeads();
-            document.getElementById('step-2').classList.add('completed');
+            if (leadCount > 0) document.getElementById('step-2').classList.add('completed');
             updateStatus();
-            showToast(`Loaded ${leads.length} leads`);
+            showToast(`Loaded ${data.leads_count} leads (${data.invalid_count} invalid)`);
         } else {
             showToast(data.error || 'Upload failed', 'danger');
         }
@@ -235,28 +260,33 @@ async function uploadCSV(e) {
 }
 
 function updateStatus() {
-    const canConfirm = selectedTmpl && leads.length > 0;
+    const canConfirm = selectedTmpl && leadCount > 0;
     document.getElementById('btnConfirm').disabled = !canConfirm;
 }
 
 async function confirmCampaign() {
-    if (!selectedTmpl || leads.length === 0) return;
-    
+    if (!selectedTmpl || leadCount === 0) return;
+
     try {
-        const resp = await apiCall('/api/campaign/start', {
-            method: 'POST',
-            body: JSON.stringify({template: selectedTmpl, leads: leads})
-        });
+        const summary = await apiCall('/api/campaign/confirm', {method: 'POST'});
+        if (summary.summary && summary.summary.preview_message) {
+            document.getElementById('previewBox').style.display = 'block';
+            document.getElementById('msgPreview').textContent = summary.summary.preview_message;
+        }
+        await apiCall('/api/campaign/start', {method: 'POST'});
         document.getElementById('step-3').classList.add('completed');
+        document.getElementById('step-4').classList.add('completed');
         document.getElementById('btnConfirm').style.display = 'none';
         document.getElementById('btnVNC').style.display = 'block';
         showToast('Campaign ready! Open WhatsApp Web to continue.');
-    } catch(e) { console.error(e); }
+    } catch(e) { /* toast shown by apiCall */ }
 }
 
-function resetCampaign() {
+async function resetCampaign() {
+    try { await apiCall('/api/campaign/reset', {method: 'POST'}); } catch(e) {}
     selectedTmpl = null;
     leads = [];
+    leadCount = 0;
     renderTemplates();
     renderLeads();
     document.getElementById('selTmpl').innerHTML = '<span class="text-muted">None selected</span>';
